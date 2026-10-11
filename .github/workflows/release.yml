@@ -74,6 +74,15 @@ jobs:
             ./scripts/plugin-package.sh "$id" --target "$TARGET"
           done
 
+      - name: Sign and verify release binaries
+        run: |
+          codesign --force --sign - --identifier me.loper target/release/bundle/macos/keyward.app
+          codesign --force --sign - --identifier me.loper.cli target/release/keyward
+          codesign --force --sign - --identifier me.loper.passkey-host target/release/keyward-passkey-host
+          codesign --verify --deep --strict target/release/bundle/macos/keyward.app
+          codesign --verify --strict target/release/keyward
+          codesign --verify --strict target/release/keyward-passkey-host
+
       - name: Pack the release files
         run: |
           mkdir -p out
