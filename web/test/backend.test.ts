@@ -220,7 +220,7 @@ class FakeFocus implements FocusEnv {
   async regain() {
     this.isFocused = true;
     for (const f of this.fns) f();
-    for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+    // Focus only dispatches the event; callers observe the async state change.
   }
 }
 
@@ -357,6 +357,7 @@ describe("the web backend", () => {
     expect(t.clip.text).toBe("same-secret");
     expect([...t.timers.pending.values()].map((x) => x.ms)).toEqual([30_000]);
     await t.timers.runAll();
+    await expect.poll(() => t.backend.clipboardState()).toBe("idle");
     expect(t.clip.text).toBe("");
 
     // Something the person copied since is left alone.
@@ -364,6 +365,7 @@ describe("the web backend", () => {
     expect(t.clip.text).toBe("cvc-987");
     t.clip.text = "the person's own text";
     await t.timers.runAll();
+    await expect.poll(() => t.backend.clipboardState()).toBe("idle");
     expect(t.clip.text).toBe("the person's own text");
 
     // Reading refused: cleared regardless.
@@ -371,6 +373,7 @@ describe("the web backend", () => {
     await t.backend.copy({ itemId: "a", field: SecretField.Custom, name: "Token" });
     expect(t.clip.text).toBe("hidden-token-value");
     await t.timers.runAll();
+    await expect.poll(() => t.backend.clipboardState()).toBe("idle");
     expect(t.clip.text).toBe("");
 
     // A TOTP field is copied as its code, never as its seed.
@@ -597,6 +600,7 @@ describe("the clipboard's clear", () => {
     expect(t.clip.text).toBe("own-secret");
     expect(t.backend.clipboardState()).toBe("stuck");
     await t.focus.regain();
+    await expect.poll(() => t.backend.clipboardState()).toBe("idle");
     expect(t.clip.text).toBe("");
     expect(t.backend.clipboardState()).toBe("idle");
     expect(states).toEqual(["waiting", "stuck", "idle"]);
@@ -638,6 +642,7 @@ describe("the clipboard's clear", () => {
     await t.backend.copy({ itemId: "c", field: SecretField.Password });
     t.clip.text = "the person's own text";
     await t.timers.runAll();
+    await expect.poll(() => t.backend.clipboardState()).toBe("idle");
     expect(reads).toBe(0);
     expect(t.clip.text).toBe("");
   });
@@ -651,6 +656,7 @@ describe("the clipboard's clear", () => {
     expect(t.clip.text).toBe("own-secret");
     expect(t.backend.clipboardState()).toBe("stuck");
     await t.focus.regain();
+    await expect.poll(() => t.backend.clipboardState()).toBe("idle");
     expect(t.clip.text).toBe("");
   });
 
