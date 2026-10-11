@@ -18,5 +18,5 @@
       "@keyward/core/*": ["../ui/core/src/*"]
     }
   },
-  "include": ["src", "test", "vitest.config.ts", "vite.config.ts"]
+  "include": ["src", "test", "../tests/state-contract/browser.tsx", "vitest.config.ts", "vite.config.ts"]
 }

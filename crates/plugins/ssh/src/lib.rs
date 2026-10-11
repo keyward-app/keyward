@@ -245,6 +245,10 @@ impl SshPlugin {
         }
         let cfg = SshSettings::read(host);
         let mut inner = self.inner.lock().await;
+        // Host agents capture an entry and its public key when they start.
+        // A sync can replace that material without changing the entry ID.
+        // Retire those projections before publishing the rebuilt routes.
+        drop_sockets(&mut inner);
         inner.table = table;
         inner.warnings = warnings;
         inner.entries = entries;

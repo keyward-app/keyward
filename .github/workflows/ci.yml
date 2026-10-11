@@ -39,10 +39,27 @@ jobs:
       - name: Install the window's dependencies
         run: npm ci
 
+      - name: Keep rbw out of the dependency graph
+        run: node scripts/assert-no-rbw.mjs
+
       # tsc and vite: the Tauri crate embeds gui/dist at compile time, so the
       # front end has to be built before cargo sees the workspace.
       - name: Build the window
         run: npm run build
+
+      - name: State contracts and frontend tests
+        env:
+          KEYWARD_STATE_CONTRACT_COMPLETE: "1"
+        run: |
+          npm -w @keyward/core test
+          npm -w @keyward/web test
+          npm -w keyward-gui test
+
+      - name: Install WebKit
+        run: npx playwright-core install webkit
+
+      - name: Mounted state contracts in WebKit
+        run: npm run test:state:webkit
 
       - name: Tests
         run: cargo test --workspace --locked
@@ -51,3 +68,6 @@ jobs:
         run: |
           cargo build -p keyward-cli --locked
           ./scripts/smoke.sh
+
+      - name: Native vault consistency contract
+        run: node scripts/native-vault-contract.mjs

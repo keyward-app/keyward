@@ -12,7 +12,11 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tokio.workspace = true
-rbw = "1.15"
+directories = "6"
+region = "3"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+hmac = "0.12"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 totp-rs = { version = "5", features = ["steam", "otpauth"] }
 zeroize = { version = "1.9.0", features = ["derive"] }

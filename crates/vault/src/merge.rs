@@ -274,10 +274,10 @@ mod tests {
     use keyward_core::merge::MergeTake;
     use std::collections::HashMap;
 
-    fn keys() -> rbw::locked::Keys {
-        let mut raw = rbw::locked::Vec::new();
-        raw.extend(std::iter::repeat_n(7u8, 64));
-        rbw::locked::Keys::new(raw)
+    fn keys() -> crate::crypto::Keys {
+        let mut raw = crate::crypto::SecretBytes::new();
+        raw.extend(std::iter::repeat_n(7u8, 64)).unwrap();
+        crate::crypto::Keys::new(raw)
     }
 
     struct Rec<'a> {

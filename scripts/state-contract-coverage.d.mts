@@ -1,0 +1,2 @@
+export function inventory(overrides?:Record<string,string>):{fields:string[];methods:string[]};
+export function audit(surface:{fields:string[];methods:string[]},manifest:{id:string;fields:string[];consumers:string[]}[],deferred:Record<string,string>,operations:Record<string,{contract?:string;reason?:string}>,probes:string[]):{errors:string[];covered:string[];deferred:string[];operations:string[]};

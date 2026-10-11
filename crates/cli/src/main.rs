@@ -171,12 +171,8 @@ enum PluginOp {
 
 /// A wrapper around the real `main`.
 ///
-/// The rbw profile is set here, before the runtime is created: `setenv(3)` is
-/// not thread-safe against `getenv(3)`, and tokio's workers read the
-/// environment themselves. Editing the environment on the move is a race and a
-/// dangling pointer in a process that holds a decrypted vault.
+/// Keeps synchronous startup separate from the async runtime.
 fn main() -> anyhow::Result<()> {
-    keyward_vault::init_profile();
     run()
 }
 

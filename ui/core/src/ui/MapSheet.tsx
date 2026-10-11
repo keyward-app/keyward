@@ -273,8 +273,8 @@ export function MapSheet({ map, hover, onHover }: { map: MapRef; hover: string |
             {drawn.lines.map((l, i) => (
               <path key={i} className={`${lineClass(l.edge.kind, l.edge.level)}${hi ? (hi.edges.has(i) ? " lit" : " faded") : ""}`} d={l.d} />
             ))}
-            {drawn.ports.map((p) => (
-              <circle key={`${p.id}:${p.x}`} className={`port${hi && !hi.nodes.has(p.id) ? " faded" : ""}`} cx={p.x} cy={p.y} r={2} />
+            {[...new Map(drawn.ports.map((p) => [`${p.id}:${p.x}:${p.y}`, p])).values()].map((p) => (
+              <circle key={`${p.id}:${p.x}:${p.y}`} className={`port${hi && !hi.nodes.has(p.id) ? " faded" : ""}`} cx={p.x} cy={p.y} r={2} />
             ))}
           </svg>
         ) : (

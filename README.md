@@ -18,6 +18,8 @@
 
 > **Experimental software.** keyward handles credentials and private keys. Try it against a test vault first; it has not had an independent security audit.
 
+Documentation: [map](docs/README.md) · Core manual: [English](docs/core/README.md) · [Русский](docs/core/README.ru.md).
+
 ## Why keyward?
 
 An ordinary SSH agent is host-blind: it offers every loaded key and SSH tries them in turn. That can expose more identities than necessary and often ends in `MaxAuthTries`. keyward stores the rule next to the key in your vault and brings up a dedicated agent socket for the destination, so SSH sees exactly one identity.
@@ -77,15 +79,7 @@ A login reads as a document: its sign-in with the password masked and the one-ti
 
 ## SSH without key sprawl
 
-Assign a `kw-host` custom field to an SSH-key item, for example:
-
-```text
-*.example.net, git.example.com, admin@node1.*:2222
-```
-
-The most specific pattern wins: exact host, then the glob with the longest literal suffix, then `*`. A tie is a visible warning, never a guess. keyward currently signs with Ed25519 and can request confirmation per key.
-
-A host's page shows its last check — here a key the server refused, with the likely cause — its connection, the rule that matched it and its host key, and the key it was opened with.
+For an SSH destination, Keyward selects one key and offers it through a dedicated per-host agent socket rather than asking the server to try every key. Detailed routing rules, the rationale for `kw-*` fields, socket setup, trust prompts and limitations live in the [SSH plugin manual](crates/plugins/ssh/README.md) · [Русский](crates/plugins/ssh/README.ru.md).
 
 <p align="center">
   <a href="docs/assets/shots/ssh-host.png"><img src="docs/assets/shots/ssh-host.png" width="900" alt="An SSH host in keyward: the key refused by the server, the connection, the matching rule and the host key"></a>
@@ -93,7 +87,7 @@ A host's page shows its last check — here a key the server refused, with the l
 
 ## Install
 
-The first public builds target **macOS 14+ on Apple silicon**. Until a signed release is published, build from source:
+The native app targets **macOS 14+ on Apple silicon**. To build from source, install Xcode Command Line Tools (`xcode-select --install`), stable Rust with Cargo, and Node.js 24.7+ with npm:
 
 ```sh
 git clone https://github.com/loperd/keyward.git
@@ -102,7 +96,7 @@ npm ci
 make install
 ```
 
-`make install` builds the app and CLI, installs the app in `/Applications` (or `~/Applications`), puts `keyward` in `~/.local/bin`, and starts a per-user LaunchAgent. It deliberately does **not** edit `~/.ssh/config`.
+`make install` builds the app, CLI, browser bridge and plugin packages, installs the app in `/Applications` (or `~/Applications`), puts the CLI and bridge in `~/.local/bin`, and starts a per-user LaunchAgent. It signs local builds with a stable development identity; this is not a notarized distribution. Add `~/.local/bin` to your shell's `PATH` if needed. It deliberately does **not** edit `~/.ssh/config`.
 
 ```sh
 make status       # installation and daemon state
@@ -125,22 +119,14 @@ keyward login
 keyward remember
 keyward unlock --touch-id
 
-# Inspect routes and print the SSH configuration snippet.
+# Enable the installed SSH plugin in Settings → Plugins first.
+# Then inspect routes; see the SSH plugin manual for OpenSSH setup.
 keyward hosts
-keyward ssh-config
-```
-
-Add the printed snippet to `~/.ssh/config` once:
-
-```sshconfig
-Match exec "keyward resolve %h %r %p"
-  IdentityAgent ~/.keyward/s/%h.sock
-  IdentitiesOnly yes
 ```
 
 ## Vault access and plugins
 
-The bundled HashiCorp Vault plugin connects to Vault, works with policies and engines, issues short-lived access, and manages secrets. The Vaultwarden plugin provides an admin view for compatible servers. Plugins are isolated executables with explicit permissions.
+The bundled integrations have separate manuals beside their code: [SSH](crates/plugins/ssh/README.md) · [HashiCorp Vault](crates/plugins/hashicorp/README.md) · [Kubernetes](crates/plugins/kube/README.md) · [Vaultwarden admin](crates/plugins/vaultwarden/README.md). The [Chromium extension](extension/README.md) has its own installation and pairing guide. Plugins are isolated executables with explicit permissions; see the [protocol](docs/plugin-protocol.md) and [registry](docs/plugin-registry.md) references before writing/publishing one.
 
 Settings › Plugins lists what is installed, what the catalogue offers, its updates and the permissions a plugin asks for. A plugin's screens are drawn by the window itself — here the Kubernetes plugin's pods of a cluster, filtered by namespace and status.
 
@@ -152,7 +138,6 @@ Settings › Plugins lists what is installed, what the catalogue offers, its upd
   <a href="docs/assets/shots/kubernetes-pods.png"><img src="docs/assets/shots/kubernetes-pods.png" width="900" alt="The Kubernetes plugin's screen in keyward: a cluster's pods with their readiness, status, restarts and age"></a>
 </p>
 
-Read the [plugin protocol](docs/plugin-protocol.md) and [plugin registry guide](docs/plugin-registry.md) before writing or publishing a plugin.
 
 ## Generate and protect
 
@@ -170,19 +155,24 @@ A locked vault shows only the gate: the account and server, the master password 
 
 ## Security boundaries
 
-- keyward sets `RBW_PROFILE=keyward`, so it does not overwrite somebody else's `rbw` profile or cache.
-- It relies on the cryptographic core from [`rbw`](https://github.com/doy/rbw) rather than implementing vault crypto itself.
+- Vault cryptography uses Bitwarden's formats over RustCrypto primitives; there is no `rbw` dependency.
+- Existing isolated `rbw-keyward` sessions and device identifiers are imported for compatibility. Keyward does not change `RBW_PROFILE` or write another client's configuration.
 - A remembered master password is stored in the macOS Keychain under an ACL requiring user presence. Locking forgets keys and removes every agent socket.
 - Network-library tracing stays off even with `KEYWARD_LOG` enabled, to avoid writing login bodies or authorization headers to logs.
 
-RSA/ECDSA signing, OpenSSH session binding and host-key TOFU are planned but not complete. `kw-cert` is displayed today but does not yet issue Vault SSH certificates.
+The SSH agent signs with Ed25519, RSA and supported ECDSA OpenSSH keys. Its per-host agent verifies OpenSSH session-binding messages and checks a configured host-key pin when the client sends one. Clients without session binding do not provide that host proof. The SSH terminal has an explicit host-trust flow. `kw-cert` does not issue Vault SSH certificates; hardware-token keys and terminal proxy-jump/certificate sessions are unsupported.
+
+Vault crypto supports PBKDF2 and Argon2id accounts and authenticated type-2 symmetric ciphertexts. Legacy unauthenticated type-0 ciphertexts and type-7 COSE ciphertexts are unsupported. A full two-way compatibility check with the official Bitwarden Desktop client remains pending.
 
 ## Development
 
 ```sh
 npm ci
+npm run build
 cargo test --workspace --locked
+cargo build -p keyward-cli --locked
 ./scripts/smoke.sh
+node scripts/native-vault-contract.mjs
 
 # Native development window
 make run

@@ -30,6 +30,13 @@ describe("a refusal's words", () => {
     expect(faultWords(new Error("the daemon is away"))).toBe("the daemon is away");
   });
 
+  it("keeps a web error's status arguments when reporting a refused save", () => {
+    setLang(Lang.En);
+    const error = Object.assign(new Error("err.serverAnswered"), { code: "err.serverAnswered", args: { status: 500 } });
+    expect(faultWords(error)).toContain("500");
+    expect(faultWords(error)).not.toContain("{status}");
+  });
+
   it("knows every key the daemon's dictionary has, in both languages", () => {
     expect(Object.keys(ruDaemon).sort()).toEqual(Object.keys(enDaemon).sort());
   });

@@ -28,7 +28,7 @@ pub async fn fetch(base_url: &str, access_token: &str) -> anyhow::Result<Sync> {
         anyhow::bail!("err.sessionExpired");
     }
     if !status.is_success() {
-        anyhow::bail!("the server answered {status}: {}", body.chars().take(200).collect::<String>());
+        anyhow::bail!("the server answered {status}");
     }
 
     parse(&body)
@@ -45,7 +45,9 @@ pub fn parse(body: &str) -> anyhow::Result<Sync> {
     if !body.trim_start().starts_with('{') {
         anyhow::bail!("the sync answer will not parse: it is not an object");
     }
-    serde_json::from_str(body).map_err(|e| anyhow::anyhow!("the sync answer will not parse: {e}"))
+    serde_json::from_str(body).map_err(|e| anyhow::anyhow!(
+        "the sync answer will not parse ({:?}, line {}, column {})", e.classify(), e.line(), e.column()
+    ))
 }
 
 #[cfg(test)]

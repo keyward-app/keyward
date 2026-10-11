@@ -16,7 +16,7 @@ use keyward_core::detail::{
 };
 use keyward_core::items::{Catalog, CollectionView, ItemKind, Org, OrgRights, VaultItem};
 use keyward_core::source::VaultEntry;
-use rbw::locked::Keys;
+use crate::crypto::Keys;
 
 /// The IIN is enough to recognise a network. This runs inside the vault
 /// process, so the catalogue never needs a card number or even its prefix.
@@ -73,15 +73,16 @@ impl Ring<'_> {
             tracing::warn!(entry = %cipher.id, "the item key has no mac and was not taken");
             return None;
         }
-        let opened = rbw::cipherstring::CipherString::new(raw)
+        let mut opened = crate::crypto::CipherString::new(raw)
             .ok()?
             .decrypt_locked_symmetric(base)
             .ok()?;
-        // An item key is 32 bytes of encryption and 32 of mac. Any shorter
-        // and `Keys::enc_key()` walks past the end of the buffer and takes the
-        // daemon down. A server that answers like that is lying: we check.
-        if opened.data().len() < 64 {
-            tracing::warn!(entry = %cipher.id, "the item key is shorter than 64 bytes and was not taken");
+        // Locked CBC decryption retains validated padding. The actual key
+        // must be exactly 32 encryption + 32 authentication bytes.
+        let pad = usize::from(*opened.data().last()?);
+        opened.truncate(opened.data().len().checked_sub(pad)?);
+        if opened.data().len() != 64 {
+            tracing::warn!(entry = %cipher.id, "the item key length is invalid and was not taken");
             return None;
         }
         Some(Keys::new(opened))
@@ -117,7 +118,7 @@ pub fn encrypt_bytes_for(ring: &Ring<'_>, cipher: &Cipher, text: &[u8]) -> anyho
     }
     let key = item.as_ref().unwrap_or(base);
     Ok(
-        rbw::cipherstring::CipherString::encrypt_symmetric(key, text)
+        crate::crypto::CipherString::encrypt_symmetric(key, text)
             .map_err(|e| keyward_core::fault!("err.encryptValue", "reason" => e))?
             .to_string(),
     )
@@ -136,7 +137,7 @@ pub(crate) fn decrypt(value: &str, keys: &Keys, item: Option<&Keys>) -> Option<S
         tracing::warn!("a value with no mac; not decrypting");
         return None;
     }
-    let raw = rbw::cipherstring::CipherString::new(value)
+    let raw = crate::crypto::CipherString::new(value)
         .ok()?
         .decrypt_symmetric(keys, item)
         .ok()?;
@@ -191,7 +192,7 @@ fn kind_of(cipher: &Cipher) -> ItemKind {
 /// it, such as the generator's history.
 pub fn encrypt_blob(ring: &Ring<'_>, text: &str) -> anyhow::Result<String> {
     Ok(
-        rbw::cipherstring::CipherString::encrypt_symmetric(ring.user, text.as_bytes())
+        crate::crypto::CipherString::encrypt_symmetric(ring.user, text.as_bytes())
             .map_err(|e| keyward_core::fault!("err.encryptValue", "reason" => e))?
             .to_string(),
     )
@@ -203,7 +204,7 @@ pub fn decrypt_raw(ring: &Ring<'_>, value: &str) -> Option<Vec<u8>> {
         tracing::warn!("a value with no mac; not decrypting");
         return None;
     }
-    rbw::cipherstring::CipherString::new(value)
+    crate::crypto::CipherString::new(value)
         .ok()?
         .decrypt_symmetric(ring.user, None)
         .ok()
@@ -217,7 +218,7 @@ pub fn encrypt_with_org(ring: &Ring<'_>, org_id: &str, text: &str) -> anyhow::Re
         .get(org_id)
         .ok_or_else(|| keyward_core::fault!("err.noOrgKeySync"))?;
     Ok(
-        rbw::cipherstring::CipherString::encrypt_symmetric(keys, text.as_bytes())
+        crate::crypto::CipherString::encrypt_symmetric(keys, text.as_bytes())
             .map_err(|e| keyward_core::fault!("err.encryptValue", "reason" => e))?
             .to_string(),
     )
@@ -929,8 +930,8 @@ mod signal_tests {
     use super::*;
 
     fn keys() -> Keys {
-        let mut v = rbw::locked::Vec::new();
-        v.extend((0..64u8).map(|i| i.wrapping_mul(37).wrapping_add(11)));
+        let mut v = crate::crypto::SecretBytes::new();
+        v.extend((0..64u8).map(|i| i.wrapping_mul(37).wrapping_add(11))).unwrap();
         Keys::new(v)
     }
 

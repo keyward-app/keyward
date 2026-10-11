@@ -8,9 +8,10 @@ export default defineConfig({
     // The core's enums are values: its modules are read from source, as the
     // build reads them (vite.config.ts).
     alias: [
+      { find: /^@keyward\/core$/, replacement: fileURLToPath(new URL("../ui/core/src/index.ts", import.meta.url)) },
       { find: /^@keyward\/ui\/(.*)$/, replacement: fileURLToPath(new URL("../ui/core/src/$1", import.meta.url)) },
       { find: /^@keyward\/core\/(.*)$/, replacement: fileURLToPath(new URL("../ui/core/src/$1", import.meta.url)) },
     ],
   },
-  test: { environment: "node", include: ["test/**/*.test.ts"] },
+  test: { environment: "node", include: ["test/**/*.test.{ts,tsx}"] },
 });

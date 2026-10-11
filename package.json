@@ -12,7 +12,9 @@
     "dev": "npm -w keyward-gui run dev",
     "build": "npm -w keyward-gui run build",
     "tauri": "npm -w keyward-gui run tauri",
-    "ui:check": "node scripts/ui-check.mjs"
+    "ui:check": "node scripts/ui-check.mjs",
+    "test:state": "KEYWARD_STATE_CONTRACT_COMPLETE=1 npm -w @keyward/web test -- test/state-contract",
+    "test:state:webkit": "node scripts/state-contract-webkit.mjs"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,

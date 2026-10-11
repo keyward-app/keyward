@@ -388,7 +388,7 @@ pub fn assert(
 /// The most a locked buffer holds. A P-256 key is some 140 bytes of DER and
 /// 190 of base64; anything near the limit is not a key we can use, and it is
 /// refused before a byte of it is copied rather than overflowing the buffer.
-const LOCKED_MAX: usize = 4096;
+const LOCKED_MAX: usize = crate::crypto::LOCKED_CAPACITY;
 
 fn damaged() -> anyhow::Error {
     keyward_core::fault!("err.passkeyDamaged")
@@ -397,19 +397,19 @@ fn damaged() -> anyhow::Error {
 /// The passkey's private key, opened in locked memory only.
 fn open_key(
     record: &serde_json::Value,
-    keys: &rbw::locked::Keys,
-    item: Option<&rbw::locked::Keys>,
+    keys: &crate::crypto::Keys,
+    item: Option<&crate::crypto::Keys>,
 ) -> anyhow::Result<SigningKey> {
     let sealed = record.get("keyValue").and_then(|v| v.as_str()).ok_or_else(damaged)?;
     // No mac, no decryption: see `read::authenticated`.
     if !crate::read::authenticated(sealed) {
         return Err(damaged());
     }
-    let cipher = rbw::cipherstring::CipherString::new(sealed).map_err(|_| damaged())?;
-    let rbw::cipherstring::CipherString::Symmetric { ciphertext, .. } = &cipher else {
+    let cipher = crate::crypto::CipherString::new(sealed).map_err(|_| damaged())?;
+    let Some(ciphertext_len) = cipher.symmetric_ciphertext_len() else {
         return Err(damaged());
     };
-    if ciphertext.len() > LOCKED_MAX {
+    if ciphertext_len > LOCKED_MAX {
         return Err(keyward_core::fault!("err.passkeyUnsupportedKey"));
     }
     let mut text = cipher.decrypt_locked_symmetric(item.unwrap_or(keys)).map_err(|_| damaged())?;
@@ -422,8 +422,12 @@ fn open_key(
     }
     text.truncate(len - pad);
 
-    let mut der = rbw::locked::Vec::new();
-    if !keyward_core::passkey::decode_with(text.data(), &mut |b| der.extend(std::iter::once(b))) {
+    let mut der = crate::crypto::SecretBytes::new();
+    let mut too_large = false;
+    let decoded = keyward_core::passkey::decode_with(text.data(), &mut |b| {
+        too_large |= der.extend(std::iter::once(b)).is_err();
+    });
+    if !decoded || too_large {
         return Err(damaged());
     }
     drop(text);
@@ -431,14 +435,20 @@ fn open_key(
 }
 
 /// A new key's PKCS#8 as base64url, in locked memory, ready to be sealed.
-fn encoded_key(key: &SigningKey) -> anyhow::Result<rbw::locked::Vec> {
+fn encoded_key(key: &SigningKey) -> anyhow::Result<crate::crypto::SecretBytes> {
     // `SecretDocument` wipes itself when dropped, at the end of this function.
     let der = key.to_pkcs8_der().map_err(|_| keyward_core::fault!("err.passkeyUnsupportedKey"))?;
     if der.as_bytes().len().div_ceil(3) * 4 > LOCKED_MAX {
         return Err(keyward_core::fault!("err.passkeyUnsupportedKey"));
     }
-    let mut out = rbw::locked::Vec::new();
-    keyward_core::passkey::encode_with(der.as_bytes(), &mut |c| out.extend(std::iter::once(c)));
+    let mut out = crate::crypto::SecretBytes::new();
+    let mut too_large = false;
+    keyward_core::passkey::encode_with(der.as_bytes(), &mut |c| {
+        too_large |= out.extend(std::iter::once(c)).is_err();
+    });
+    if too_large {
+        return Err(keyward_core::fault!("err.passkeyUnsupportedKey"));
+    }
     Ok(out)
 }
 
@@ -784,10 +794,10 @@ mod tests {
     use p256::ecdsa::VerifyingKey;
     use p256::pkcs8::DecodePublicKey as _;
 
-    fn user_keys() -> rbw::locked::Keys {
-        let mut raw = rbw::locked::Vec::new();
-        raw.extend(std::iter::repeat_n(7u8, 64));
-        rbw::locked::Keys::new(raw)
+    fn user_keys() -> crate::crypto::Keys {
+        let mut raw = crate::crypto::SecretBytes::new();
+        raw.extend(std::iter::repeat_n(7u8, 64)).unwrap();
+        crate::crypto::Keys::new(raw)
     }
 
     fn creation(rp_id: &str, user: &[u8]) -> CreationRequest {
@@ -809,9 +819,9 @@ mod tests {
     }
 
     /// A snapshot with one login holding the given passkey records.
-    fn with_login(user: &rbw::locked::Keys, records: Vec<serde_json::Value>) -> Sync {
+    fn with_login(user: &crate::crypto::Keys, records: Vec<serde_json::Value>) -> Sync {
         let enc = |s: &str| {
-            rbw::cipherstring::CipherString::encrypt_symmetric(user, s.as_bytes()).unwrap().to_string()
+            crate::crypto::CipherString::encrypt_symmetric(user, s.as_bytes()).unwrap().to_string()
         };
         serde_json::from_value(serde_json::json!({
             "ciphers": [{"id": "e1", "type": 1, "name": enc("Example"),
@@ -1068,7 +1078,7 @@ mod tests {
         let user = user_keys();
         let orgs = std::collections::HashMap::new();
         let ring = Ring { user: &user, orgs: &orgs };
-        let enc = |s: &str| rbw::cipherstring::CipherString::encrypt_symmetric(&user, s.as_bytes()).unwrap().to_string();
+        let enc = |s: &str| crate::crypto::CipherString::encrypt_symmetric(&user, s.as_bytes()).unwrap().to_string();
         let snapshot: Sync = serde_json::from_value(serde_json::json!({"ciphers": [
             {"id": "a", "type": 1, "name": enc("Example"), "login": {"username": enc("me"), "uris": [{"uri": enc("https://login.example.com/x")}]}},
             {"id": "b", "type": 1, "name": enc("Bare"), "login": {"uris": [{"uri": enc("example.com")}]}},

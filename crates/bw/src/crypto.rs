@@ -112,6 +112,10 @@ pub struct SymmetricKey {
 }
 
 impl SymmetricKey {
+    /// Borrowed parts for authenticated in-place decryption into native
+    /// protected memory. The key remains owned and zeroized by this type.
+    pub fn enc_key(&self) -> &[u8; 32] { &self.enc }
+    pub fn mac_key(&self) -> &[u8; 32] { &self.mac }
     /// Out of 64 bytes: the first 32 encrypt, the second 32 sign.
     pub fn from_bytes(raw: &[u8]) -> anyhow::Result<Self> {
         if raw.len() != 64 {
@@ -204,6 +208,7 @@ impl EncString {
                 let (Some(iv), Some(ct), Some(mac)) = (parts.next(), parts.next(), parts.next()) else {
                     anyhow::bail!("a type 2 ciphertext has to have three parts");
                 };
+                if parts.next().is_some() { anyhow::bail!("a type 2 ciphertext has extra parts"); }
                 Ok(Self::Symmetric { iv: decode(iv)?, ct: decode(ct)?, mac: decode(mac)? })
             }
             // Bitwarden's numbering: 3 is Rsa2048_OaepSha256_B64, 4 is

@@ -43,8 +43,6 @@ pub fn agent_socket(host: &str) -> PathBuf {
     agent_socket_dir().join(format!("{safe}.sock"))
 }
 
-/// The file source of mappings: a bridge for the early stages, while access to
-/// the vault is not yet on the `rbw` crate.
 /// Where the installed plugins live: `~/.keyward/plugins`.
 pub fn plugins_dir() -> PathBuf {
     base_dir().join("plugins")

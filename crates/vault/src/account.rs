@@ -20,7 +20,7 @@ use keyward_core::account::{
 };
 use keyward_core::accounts::Account;
 use keyward_core::two_factor::TwoFactorProvider;
-use rbw::locked::Keys;
+use crate::crypto::Keys;
 
 use crate::{LoginOutcome, Vault};
 
@@ -36,16 +36,16 @@ const PROVIDER_EMAIL: i32 = 1;
 /// and a guessed one derives another key. A session file holding parameters
 /// outside the bounds was not written by a login of ours (the prelogin answer
 /// is checked before it is stored), so it is refused rather than run.
-pub(crate) fn kdf_of(db: &rbw::db::Db) -> anyhow::Result<Kdf> {
+pub(crate) fn kdf_of(db: &crate::session::Session) -> anyhow::Result<Kdf> {
     let missing = || keyward_core::fault!("err.nothingToUnlock");
     let iterations = db.iterations.ok_or_else(missing)?;
     let kdf = match db.kdf.ok_or_else(missing)? {
-        rbw::api::KdfType::Argon2id => Kdf::Argon2id {
+        crate::session::KdfType::Argon2id => Kdf::Argon2id {
             iterations,
             memory_mib: db.memory.ok_or_else(missing)?,
             parallelism: db.parallelism.ok_or_else(missing)?,
         },
-        rbw::api::KdfType::Pbkdf2 => Kdf::Pbkdf2 { iterations },
+        crate::session::KdfType::Pbkdf2 => Kdf::Pbkdf2 { iterations },
     };
     Ok(kdf.checked()?)
 }
@@ -543,6 +543,10 @@ impl Vault {
     /// the history, the passkeys' last uses, the password under Touch ID and
     /// the PIN.
     pub fn forget_local(&self) {
+        crate::sync::invalidate(&self.account.id, || self.forget_local_files());
+    }
+
+    fn forget_local_files(&self) {
         let (_, email) = self.identity();
         crate::session::remove(&self.account);
         let _ = std::fs::remove_file(keyward_core::paths::snapshot_file(&self.account.id));
@@ -775,15 +779,15 @@ mod tests {
 
     #[test]
     fn stored_kdf_parameters_are_held_to_the_bounds() {
-        let mut db = rbw::db::Db::new();
-        db.kdf = Some(rbw::api::KdfType::Pbkdf2);
+        let mut db = crate::session::Session::new();
+        db.kdf = Some(crate::session::KdfType::Pbkdf2);
         db.iterations = Some(600_000);
         assert_eq!(kdf_of(&db).unwrap(), Kdf::Pbkdf2 { iterations: 600_000 });
 
         // A session file edited to weaken the KDF, or to hang the daemon.
         db.iterations = Some(1);
         assert_eq!(kdf_of(&db).unwrap_err().to_string(), keyward_bw::crypto::KDF_OUT_OF_RANGE);
-        db.kdf = Some(rbw::api::KdfType::Argon2id);
+        db.kdf = Some(crate::session::KdfType::Argon2id);
         db.iterations = Some(3);
         db.memory = Some(1 << 20);
         db.parallelism = Some(4);

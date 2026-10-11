@@ -1,6 +1,5 @@
 //! Where entries come from. The vault is the destination; a file is the
-//! bridge used in stages 1-2, while access to Bitwarden is not yet on the
-//! `rbw` crate (see section 2.2 of the spec).
+//! bridge for isolated SSH mappings; Bitwarden access uses keyward-bw.
 //!
 //! What the `kw-*` fields mean is the business of whichever plugin reads them:
 //! `kw-host` is a route to the ssh plugin and nothing at all to the core. The

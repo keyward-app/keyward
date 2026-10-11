@@ -1,5 +1,5 @@
 //! An account's session on disk — the tokens, the KDF, the protected keys and
-//! the entries rbw decrypts — sealed.
+//! the complete encrypted vault snapshot — sealed.
 //!
 //! rbw wrote it to its cache directory with `File::create`: plain JSON, the
 //! access and refresh tokens in it, mode 0644, not atomically. Here it is one
@@ -16,8 +16,8 @@
 //! uid reaches the keychain item as it reaches `security` itself; that is the
 //! same line as the rest of keyward's keychain (see `biometric`).
 //!
-//! The shape inside is still rbw's `Db` — the entries and the unlock still go
-//! through rbw, which reads that shape.
+//! The owned schema retains the old database members for compatibility and
+//! adds the complete snapshot. Old legacy records remain opaque ciphertext.
 //!
 //! The rules:
 //! - a sealed file whose key is gone is an error, loudly — never a sign-out;
@@ -29,7 +29,55 @@
 use keyward_core::accounts::Account;
 use zeroize::Zeroizing;
 
-pub(crate) type Session = rbw::db::Db;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KdfType { Pbkdf2, Argon2id }
+impl serde::Serialize for KdfType {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(match self { Self::Pbkdf2 => "0", Self::Argon2id => "1" })
+    }
+}
+impl<'de> serde::Deserialize<'de> for KdfType {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(d)?;
+        match value {
+            serde_json::Value::String(s) if s == "0" => Ok(Self::Pbkdf2),
+            serde_json::Value::String(s) if s == "1" => Ok(Self::Argon2id),
+            serde_json::Value::Number(n) if n.as_u64() == Some(0) => Ok(Self::Pbkdf2),
+            serde_json::Value::Number(n) if n.as_u64() == Some(1) => Ok(Self::Argon2id),
+            _ => Err(serde::de::Error::custom("invalid KDF type")),
+        }
+    }
+}
+
+/// Retains the old serialized members exactly. The full owned snapshot is
+/// committed in this same sealed file, rather than a second non-atomic write.
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) struct Session {
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub kdf: Option<KdfType>,
+    pub iterations: Option<u32>,
+    pub memory: Option<u32>,
+    pub parallelism: Option<u32>,
+    pub protected_key: Option<String>,
+    pub protected_private_key: Option<String>,
+    pub protected_org_keys: std::collections::HashMap<String, String>,
+    // Legacy records are preserved as ciphertext JSON, without a rbw model.
+    pub entries: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<keyward_bw::Sync>,
+}
+impl Session {
+    #[cfg(test)]
+    pub fn new() -> Self { Self::default() }
+    pub fn needs_login(&self) -> bool {
+        self.access_token.is_none() || self.refresh_token.is_none() || self.iterations.is_none()
+            || self.kdf.is_none() || self.protected_key.is_none()
+    }
+    pub fn entry_count(&self) -> usize {
+        self.snapshot.as_ref().map(|s| s.ciphers.len()).unwrap_or(self.entries.len())
+    }
+}
 
 /// The first bytes of a sealed session: a plain one is JSON and begins with
 /// `{`.
@@ -64,7 +112,7 @@ fn path(account: &Account) -> std::path::PathBuf {
 
 /// rbw's file for the account, as rbw names it.
 fn legacy_path(account: &Account) -> std::path::PathBuf {
-    rbw::dirs::db_file(&account.base_url, &account.email)
+    crate::legacy::db_file(&account.base_url, &account.email)
 }
 
 /// The key's name in the keychain: the account's hashed name, no email.
@@ -351,7 +399,6 @@ pub(crate) mod tests {
             std::env::set_var("KEYWARD_HOME", dir.join("keyward"));
             std::env::set_var("HOME", &dir);
             std::env::set_var("XDG_CACHE_HOME", dir.join("cache"));
-            std::env::set_var("RBW_PROFILE", crate::PROFILE);
         }
         (guard, dir)
     }
@@ -398,6 +445,68 @@ pub(crate) mod tests {
 
     fn contains(hay: &[u8], needle: &str) -> bool {
         hay.windows(needle.len()).any(|w| w == needle.as_bytes())
+    }
+
+    #[test]
+    fn old_database_shape_and_kdf_encodings_remain_compatible() {
+        let legacy = serde_json::json!({
+            "access_token":"old-access", "refresh_token":"old-refresh",
+            "kdf":"0", "iterations":600000, "memory":null, "parallelism":null,
+            "protected_key":"2.user", "protected_private_key":"2.private",
+            "protected_org_keys":{"org":"6.legacy"},
+            "entries":[{"id":"legacy-item","name":"encrypted","data":{"Login":{}}}],
+        });
+        let db: Session = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(!db.needs_login());
+        assert_eq!(serde_json::to_value(&db).unwrap(), legacy);
+        let mut numeric = legacy.clone(); numeric["kdf"] = serde_json::json!(1);
+        assert_eq!(serde_json::from_value::<Session>(numeric.clone()).unwrap().kdf, Some(KdfType::Argon2id));
+        numeric["kdf"] = serde_json::json!(9);
+        assert!(serde_json::from_value::<Session>(numeric).is_err());
+        assert!(serde_json::from_str::<Session>("{}").is_err(), "truncated metadata is not a fresh empty session");
+    }
+
+    #[test]
+    fn old_sealed_session_loads_without_login_and_retains_ciphertext() {
+        let (_g, _dir) = sandbox("owned-legacy");
+        let (keys, a) = (Memory::default(), account());
+        let mut db = session("old-refresh"); db.kdf = Some(KdfType::Pbkdf2);
+        db.protected_key = Some("2.protected-user".into());
+        db.protected_private_key = Some("2.protected-private".into());
+        db.entries = vec![serde_json::json!({"id":"legacy","name":"ciphertext"})];
+        // With no new snapshot member, serialization is the original schema.
+        let old_plain = Zeroizing::new(serde_json::to_vec(&db).unwrap());
+        let key = [11;32]; keys.store(&key_name(&a), &key).unwrap();
+        let old_sealed = seal(&a, &key, &old_plain).unwrap();
+        std::fs::create_dir_all(path(&a).parent().unwrap()).unwrap();
+        keyward_core::paths::write_private(&path(&a), &old_sealed).unwrap();
+        let loaded = load_with(&keys, &a).unwrap().unwrap();
+        assert_eq!(loaded.refresh_token.as_deref(), Some("old-refresh"));
+        assert!(!loaded.needs_login());
+        assert_eq!(loaded.entries, db.entries);
+        assert_eq!(loaded.protected_private_key, db.protected_private_key);
+        assert_eq!(std::fs::read(path(&a)).unwrap(), old_sealed, "reading does not overwrite a compatible session");
+    }
+
+    #[test]
+    fn full_snapshot_and_metadata_are_one_sealed_commit_and_failed_write_preserves_it() {
+        let (_g, _dir) = sandbox("owned-snapshot");
+        let (keys, a) = (Memory::default(), account());
+        let mut db = session("snapshot-refresh");
+        db.snapshot = Some(serde_json::from_value(serde_json::json!({
+            "profile":{"id":"p","key":"2.protected"},
+            "ciphers":[{"id":"new-item","name":"2.secret-cipher"}],
+        })).unwrap());
+        save_with(&keys, &a, &db).unwrap();
+        let before = std::fs::read(path(&a)).unwrap();
+        assert!(!contains(&before, "snapshot-refresh") && !contains(&before, "new-item"));
+        let loaded = load_with(&keys, &a).unwrap().unwrap();
+        assert_eq!(loaded.entry_count(), 1);
+        assert_eq!(loaded.snapshot.unwrap().ciphers[0].id, "new-item");
+        *keys.down.lock().unwrap() = true;
+        db.snapshot = Some(keyward_bw::Sync::default());
+        assert!(save_with(&keys, &a, &db).is_err());
+        assert_eq!(std::fs::read(path(&a)).unwrap(), before);
     }
 
     #[test]

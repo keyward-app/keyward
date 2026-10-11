@@ -49,12 +49,20 @@ jobs:
         run: npm ci
 
       - name: Tests
+        env:
+          KEYWARD_STATE_CONTRACT_COMPLETE: "1"
         run: |
+          node scripts/assert-no-rbw.mjs
           npm run build
+          npm -w @keyward/core test
+          npm -w @keyward/web test
+          npm -w keyward-gui test
+          npx playwright-core install webkit
+          npm run test:state:webkit
           cargo test --workspace --locked
 
       - name: Build the CLI
-        run: cargo build --release --locked -p keyward-cli
+        run: cargo build --release --locked -p keyward-cli -p keyward-passkey-host
 
       - name: Build the application
         run: cd gui && npm run tauri build -- --bundles app
@@ -70,10 +78,13 @@ jobs:
         run: |
           mkdir -p out
           ditto -c -k --keepParent target/release/bundle/macos/keyward.app "out/keyward-$VERSION-macos-arm64.zip"
-          tar -czf "out/keyward-cli-$VERSION-$TARGET.tar.gz" -C target/release keyward
+          tar -czf "out/keyward-cli-$VERSION-$TARGET.tar.gz" -C target/release keyward keyward-passkey-host
           cp dist/packages/*-"$TARGET".tar.gz out/
           ( cd out && shasum -a 256 * > SHA256SUMS )
           ls -l out
+
+      - name: Native vault consistency contract
+        run: node scripts/native-vault-contract.mjs target/release/keyward
 
       - name: Publish the release
         env:

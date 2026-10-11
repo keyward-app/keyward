@@ -9,6 +9,7 @@
 // private keys and hidden fields are not touched — they are opened by
 // `secretBytes` alone, inside a copy, a reveal or a code.
 import { type Catalog, type Collection, type Field, type Folder, type Item, type ItemDetail, ItemKind, type Member, MemberStatus, type Org, type OrgAbilities, OrgRole, Permission, type SecretRef, SecretField } from "@keyward/core/model/types";
+import { algorithmOf } from "@keyward/core/model/ssh";
 import { fromUtf8, zero, type Bytes } from "./bytes";
 import { randomBytes, sha256, type SymKey } from "./crypto";
 import { decryptBytes, decryptString } from "./encstring";
@@ -408,7 +409,9 @@ export async function buildDetail(snapshot: SyncData, ring: KeyRing, id: string,
       const s = c.sshKey;
       if (!s) break;
       push(visible("fingerprint", await dec(s.fingerprint, key), true));
-      push(visible("publicKey", await dec(s.publicKey, key), true));
+      const publicKey = await dec(s.publicKey, key);
+      push(visible("publicKey", publicKey, true));
+      if (publicKey) push(visible("algorithm", algorithmOf(publicKey)));
       if (s.privateKey !== null) fields.push(secret("privateKey", { itemId: id, field: SecretField.PrivateKey }));
       break;
     }

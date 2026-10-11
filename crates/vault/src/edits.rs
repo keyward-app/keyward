@@ -409,10 +409,10 @@ pub fn pending_state() -> EditState {
 mod tests {
     use super::*;
 
-    fn keys(byte: u8) -> rbw::locked::Keys {
-        let mut raw = rbw::locked::Vec::new();
-        raw.extend(std::iter::repeat_n(byte, 64));
-        rbw::locked::Keys::new(raw)
+    fn keys(byte: u8) -> crate::crypto::Keys {
+        let mut raw = crate::crypto::SecretBytes::new();
+        raw.extend(std::iter::repeat_n(byte, 64)).unwrap();
+        crate::crypto::Keys::new(raw)
     }
 
     fn meta(account_id: &str) -> PendingEdit {

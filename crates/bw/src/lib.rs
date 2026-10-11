@@ -1,9 +1,8 @@
 //! Our own Bitwarden client.
 //!
-//! It is being written so as not to depend on `rbw` entirely: its model loses
-//! the trash, favourites, organisation names and collections, and its api
-//! client cannot edit ssh keys. The cryptography still comes from `rbw` — it is
-//! common and well tried; everything else moves here bit by bit.
+//! Own HTTP transport, complete vault models and Bitwarden cryptographic
+//! formats over RustCrypto. Native and web clients share the protocol boundary
+//! without depending on a third-party CLI's configuration or session model.
 
 pub mod account;
 pub mod client;

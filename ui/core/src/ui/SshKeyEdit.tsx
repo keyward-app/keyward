@@ -16,24 +16,8 @@ import { Icon } from "./Icons";
 import { BtnIcon, Kbd, Mark, useCore } from "./marks";
 import { Phase } from "./feedback";
 import "./ssh-key-edit.css";
-
-/// A key's kind as its public line names it, in a person's words.
-const ALGORITHM_WORDS: Readonly<Record<string, string>> = {
-  "ssh-ed25519": "Ed25519",
-  "ssh-rsa": "RSA",
-  "ecdsa-sha2-nistp256": "ECDSA P-256",
-  "ecdsa-sha2-nistp384": "ECDSA P-384",
-  "ecdsa-sha2-nistp521": "ECDSA P-521",
-  "sk-ssh-ed25519@openssh.com": "Ed25519 (FIDO)",
-  "sk-ecdsa-sha2-nistp256@openssh.com": "ECDSA (FIDO)",
-};
-
-/// What a public key line says its kind is; the line's own word for a kind
-/// the table does not know.
-export function algorithmOf(publicKey: string): string | null {
-  const kind = publicKey.trim().split(/\s+/)[0] ?? "";
-  return ALGORITHM_WORDS[kind] ?? (kind || null);
-}
+import { algorithmOf } from "../model/ssh";
+export { algorithmOf } from "../model/ssh";
 
 /// What the block is busy with.
 enum KeyBusy {

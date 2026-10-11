@@ -1,17 +1,15 @@
 //! Real access to Bitwarden: logging in, unlocking with the master password,
 //! syncing and decrypting items.
 //!
-//! We do not write the cryptography ourselves; we take `rbw`'s core (MIT): key
-//! derivation from the master password (PBKDF2/Argon2), EncString, the
-//! protected key, organisation keys. Ours here is only what keyward needs:
-//! which items to take and which fields to get out of them.
-//!
-//! The store is kept apart from the user's own `rbw` by the `RBW_PROFILE`
-//! variable: `dirs::profile()` puts it into the directory name, so keyward
-//! lives in `rbw-keyward` and not in somebody else's `rbw`.
+//! Bitwarden's protocol and cryptographic formats are implemented by
+//! keyward-bw over RustCrypto. The native vault owns protected key memory and
+//! sealed account sessions. Old isolated profiles are read only for migration.
 
 mod account;
+pub mod crypto;
+mod legacy;
 mod session;
+mod sync;
 pub mod sshdraft;
 pub mod biometric;
 pub mod bwapi;
@@ -33,10 +31,7 @@ use keyward_core::items::{Catalog, CollectionAccess, CollectionPermission, Membe
 use keyward_core::source::VaultEntry;
 use keyward_core::two_factor::TwoFactorProvider;
 use keyward_core::vault_state::VaultState;
-use rbw::locked::Keys;
-
-/// The profile keyward keeps rbw's config and cache under.
-const PROFILE: &str = "keyward";
+use crate::crypto::Keys;
 
 /// Picks the account up out of the rbw config when keyward's register is
 /// empty.
@@ -46,12 +41,11 @@ const PROFILE: &str = "keyward";
 /// have seen "the vault is not set up" after an update and decided everything
 /// was gone.
 pub fn migrate_single_account() -> Option<Account> {
-    init_profile();
     let mut registry = keyward_core::accounts::Registry::load();
     if !registry.accounts.is_empty() {
         return None;
     }
-    let cfg = rbw::config::Config::load().ok()?;
+    let cfg = crate::legacy::config()?;
     let (base_url, email) = (cfg.base_url?, cfg.email?);
     if base_url.is_empty() || email.is_empty() {
         return None;
@@ -61,26 +55,6 @@ pub fn migrate_single_account() -> Option<Account> {
     registry.save().ok()?;
     tracing::info!(email = %account.email, "the account was carried over from the rbw config");
     Some(account)
-}
-
-/// Turns the profile isolation on. It must be called before any call on rbw
-/// and before the runtime starts.
-///
-/// Our own profile is set **unconditionally**. A foreign `RBW_PROFILE` from
-/// the environment used to be left as it was, and keyward went off to write
-/// its config and tokens into the real rbw's profile, wiping out a person's
-/// working session. The isolation the whole thing exists for could be switched
-/// off by one line in `.zshrc`.
-///
-/// Exactly one call, at the very start of the process: `setenv(3)` is not
-/// thread-safe against `getenv(3)`, and the runtime's worker threads read the
-/// environment themselves.
-pub fn init_profile() {
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| {
-        // SAFETY: the only call, before the runtime and its workers exist.
-        unsafe { std::env::set_var("RBW_PROFILE", PROFILE) };
-    });
 }
 
 /// A login in progress: the server asked for a second factor. The password
@@ -134,7 +108,7 @@ pub struct Vault {
 ///
 /// It exists so that a network call does not hold the daemon's shared lock:
 /// while one thread syncs, the others have to answer, or ssh runs into its own
-/// timeout for no reason. The keys are copied — rbw's `Keys` wipe their memory
+/// timeout for no reason. The keys are copied — owned `Keys` wipe their memory
 /// when dropped, so a copy lives for exactly one request.
 ///
 /// A login in progress is deliberately not copied: it holds the master
@@ -153,10 +127,6 @@ impl Clone for Vault {
 
 impl Vault {
     pub fn for_account(account: Account) -> Self {
-        debug_assert!(
-            std::env::var("RBW_PROFILE").as_deref() == Ok(PROFILE),
-            "the rbw profile must be set before the runtime starts"
-        );
         keyward_core::paths::migrate_account_files(&account.id);
         Self { account, keys: None, org_keys: HashMap::new(), pending: None }
     }
@@ -170,26 +140,6 @@ impl Vault {
 
     pub fn account(&self) -> &Account {
         &self.account
-    }
-
-    /// `rbw`'s core takes the server address from its own config rather than
-    /// from arguments. So before every network call the config is rewritten for
-    /// the current account. That is the price of several accounts over somebody
-    /// else's client; there is no race, because every operation goes through
-    /// the daemon's single mutex. The proper cure is vendoring the api client
-    /// with an explicit config.
-    fn activate(&self) -> anyhow::Result<()> {
-        let mut cfg = rbw::config::Config::load().unwrap_or_default();
-        let already = cfg.base_url.as_deref() == Some(self.account.base_url.as_str())
-            && cfg.email.as_deref() == Some(self.account.email.as_str())
-            && cfg.identity_url.as_deref() == self.account.identity_url.as_deref();
-        if already {
-            return Ok(());
-        }
-        cfg.base_url = Some(self.account.base_url.clone());
-        cfg.email = Some(self.account.email.clone());
-        cfg.identity_url = self.account.identity_url.clone();
-        cfg.save().map_err(|e| keyward_core::fault!("err.rbwConfigNotSaved", "reason" => e))
     }
 
     fn identity(&self) -> (String, String) {
@@ -229,7 +179,7 @@ impl Vault {
             return VaultState::Locked { email, server };
         }
         let tagged = self.plugin_entries().len();
-        VaultState::Unlocked { email, server, entries: db.entries.len(), tagged }
+        VaultState::Unlocked { email, server, entries: db.entry_count(), tagged }
     }
 
     /// The first attempt at logging in, without a second factor. If the server
@@ -265,7 +215,7 @@ impl Vault {
             anyhow::bail!(keyward_core::fault!("err.sessionNotDamaged"));
         }
         self.lock();
-        session::remove(&self.account);
+        crate::sync::invalidate(&self.account.id, || session::remove(&self.account));
         tracing::warn!(email = %self.account.email, "the damaged session was removed at the person's word");
         Ok(())
     }
@@ -397,28 +347,21 @@ impl Vault {
         let (_, email) = self.identity();
         let db = self.db()?;
 
-        let (Some(kdf), Some(iterations), Some(protected_key), Some(protected_private_key)) = (
-            db.kdf,
-            db.iterations,
+        let (Some(protected_key), Some(protected_private_key)) = (
             db.protected_key.as_deref(),
             db.protected_private_key.as_deref(),
         ) else {
             return Err(keyward_core::fault!("err.nothingToUnlock"));
         };
 
-        // rbw derives the key itself from the stored parameters: they go
+        // Derivation uses the stored parameters: they go
         // through the same bounds as a prelogin answer first, so a session
         // file tampered with on disk can neither weaken nor hang the KDF.
-        crate::account::kdf_of(&db)?;
-
-        let pw = locked_password(password);
-        let (keys, org_keys) = rbw::actions::unlock(
+        let kdf = crate::account::kdf_of(&db)?;
+        let (keys, org_keys) = crate::crypto::unlock(
             &email,
-            &pw,
+            password,
             kdf,
-            iterations,
-            db.memory,
-            db.parallelism,
             protected_key,
             protected_private_key,
             &db.protected_org_keys,
@@ -427,7 +370,7 @@ impl Vault {
 
         self.keys = Some(keys);
         self.org_keys = org_keys;
-        tracing::info!(entries = db.entries.len(), "the vault was unlocked");
+        tracing::info!(entries = db.entry_count(), "the vault was unlocked");
         Ok(())
     }
 
@@ -449,85 +392,24 @@ impl Vault {
     }
 
     pub async fn sync(&self) -> anyhow::Result<usize> {
-        // rbw's sync takes the server from its own config.
-        self.activate()?;
         let (server, _) = self.identity();
-        let mut db = self.db()?;
-        let (Some(access_token), Some(refresh_token)) =
-            (db.access_token.clone(), db.refresh_token.clone())
-        else {
-            return Err(keyward_core::fault!("err.noTokens"));
-        };
-
-        // The refresh is ours, not rbw's: rbw drops the refresh token the
-        // server rotates in, and the session ended on the login's thirtieth
-        // day. A spent access token is traded here, and the new refresh token
-        // is on disk before anything else is asked.
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        let (access_token, refresh_token) = if keyward_bw::identity::spent(&access_token, now, 60) {
-            let identity = keyward_bw::identity::url(&server, self.account.identity_url.as_deref());
-            match keyward_bw::identity::refresh(&identity, &refresh_token).await {
-                Ok(tokens) => {
-                    rotate(&mut db, tokens);
-                    self.save_db(&db)?;
-                    (db.access_token.clone().unwrap_or_default(), db.refresh_token.clone().unwrap_or_default())
-                }
-                Err(e) if e.to_string() == "err.sessionEnded" => {
-                    // The server has ended the session: its tokens are of no
-                    // use, and keeping them only says "failed" on every sync.
-                    // Without them the vault reads as signed out, and the
-                    // window asks for the master password; the entries on
-                    // disk stay.
-                    db.access_token = None;
-                    db.refresh_token = None;
-                    self.save_db(&db)?;
-                    tracing::warn!("the server ended the session; a new login is needed");
-                    return Err(keyward_core::fault!("err.sessionEnded"));
-                }
-                Err(e) => return Err(keyward_core::fault!("err.syncFailed", "reason" => e)),
-            }
-        } else {
-            (access_token, refresh_token)
-        };
-
-        let (new_access_token, (protected_key, protected_private_key, protected_org_keys, entries)) =
-            rbw::actions::sync(&access_token, &refresh_token)
-                .await
-                .map_err(|e| keyward_core::fault!("err.syncFailed", "reason" => rbw_reason(&e)))?;
-
-        if let Some(t) = new_access_token {
-            db.access_token = Some(t);
-        }
-        db.protected_key = Some(protected_key);
-        db.protected_private_key = Some(protected_private_key);
-        db.protected_org_keys = protected_org_keys;
-        let count = entries.len();
-        db.entries = entries;
-        self.save_db(&db)?;
-
-        // Our own snapshot: it has the trash, favourites, organisation names
-        // and collections — everything rbw's model loses.
-        match keyward_bw::sync::fetch(&server, db.access_token.as_deref().unwrap_or_default()).await {
-            Ok(snapshot) => {
-                let path = keyward_core::paths::snapshot_file(&self.account.id);
-                if let Some(dir) = path.parent() {
-                    let _ = std::fs::create_dir_all(dir);
-                }
-                if let Ok(text) = serde_json::to_string(&snapshot) {
-                    if let Err(e) = keyward_core::paths::write_private(&path, text.as_bytes()) {
-                        tracing::warn!(error = %e, "our own snapshot was not saved");
-                    }
-                }
-            }
-            Err(e) => tracing::warn!(error = %e, "our own snapshot did not arrive"),
-        }
-
+        let identity = keyward_bw::identity::url(&server, self.account.identity_url.as_deref());
+        let count = crate::sync::synchronize(&self.account.id, &server, &identity,
+            || self.db(), |db| self.save_db(db)).await?;
         tracing::info!(entries = count, "synced");
         Ok(count)
     }
 
     /// The vault snapshot our own sync brought back.
     fn snapshot(&self) -> keyward_bw::Sync {
+        match session::load(&self.account) {
+            Ok(Some(db)) => if let Some(snapshot) = db.snapshot { return snapshot; },
+            Ok(None) => {},
+            Err(e) => {
+                tracing::warn!(error = %e, "sealed snapshot is unavailable");
+                return keyward_bw::Sync::default();
+            }
+        }
         let path = keyward_core::paths::snapshot_file(&self.account.id);
         std::fs::read_to_string(path)
             .ok()
@@ -643,7 +525,7 @@ impl Vault {
     /// expired session must not look like a refusal from the server.
     async fn write_cipher(&self, cipher: &keyward_bw::model::Cipher) -> anyhow::Result<()> {
         let (server, _) = self.identity();
-        let access = |db: &rbw::db::Db| db.access_token.clone();
+        let access = |db: &crate::session::Session| db.access_token.clone();
 
         let token = access(&self.db()?).ok_or_else(|| keyward_core::fault!("err.noTokens"))?;
         match crate::bwapi::put_cipher(&server, &token, cipher).await {
@@ -827,7 +709,6 @@ impl Vault {
         collection_ids: Vec<String>,
         edit: ItemEdit,
     ) -> anyhow::Result<String> {
-        self.activate()?;
         let name = edit.name.clone().unwrap_or_default();
         if name.trim().is_empty() {
             return Err(keyward_core::fault!("err.itemNeedsName"));
@@ -2115,7 +1996,7 @@ impl Vault {
         }
         let ring = self.ring().ok_or_else(|| keyward_core::fault!("err.vaultLocked"))?;
         let key = ring.base(None).ok_or_else(|| keyward_core::fault!("err.vaultLocked"))?;
-        Ok(rbw::cipherstring::CipherString::encrypt_symmetric(key, text.as_bytes())
+        Ok(crate::crypto::CipherString::encrypt_symmetric(key, text.as_bytes())
             .map_err(|e| keyward_core::fault!("err.encryptValue", "reason" => e))?
             .to_string())
     }
@@ -2313,24 +2194,10 @@ fn live_cipher<'a>(snapshot: &'a keyward_bw::Sync, id: &str) -> anyhow::Result<&
     Ok(c)
 }
 
-fn rotate(db: &mut rbw::db::Db, tokens: keyward_bw::identity::Tokens) {
+fn rotate(db: &mut crate::session::Session, tokens: keyward_bw::identity::Tokens) {
     db.access_token = Some(tokens.access_token.to_string());
     if let Some(r) = tokens.refresh_token {
         db.refresh_token = Some(r.to_string());
-    }
-}
-
-/// An rbw error in words that say where it went wrong. A JSON one says which
-/// field of the server's answer did not read and what kind of fault it was —
-/// not the value: the answer is the vault, and its words stay out of errors
-/// and logs.
-fn rbw_reason(e: &rbw::error::Error) -> String {
-    match e {
-        rbw::error::Error::Json { source } => {
-            let inner = source.inner();
-            format!("{e} at {} ({:?}, line {} column {})", source.path(), inner.classify(), inner.line(), inner.column())
-        }
-        other => other.to_string(),
     }
 }
 
@@ -2339,13 +2206,13 @@ fn set_kdf(db: &mut session::Session, kdf: keyward_bw::crypto::Kdf) {
     use keyward_bw::crypto::Kdf;
     match kdf {
         Kdf::Pbkdf2 { iterations } => {
-            db.kdf = Some(rbw::api::KdfType::Pbkdf2);
+            db.kdf = Some(crate::session::KdfType::Pbkdf2);
             db.iterations = Some(iterations);
             db.memory = None;
             db.parallelism = None;
         }
         Kdf::Argon2id { iterations, memory_mib, parallelism } => {
-            db.kdf = Some(rbw::api::KdfType::Argon2id);
+            db.kdf = Some(crate::session::KdfType::Argon2id);
             db.iterations = Some(iterations);
             db.memory = Some(memory_mib);
             db.parallelism = Some(parallelism);
@@ -2361,7 +2228,7 @@ fn device_id() -> anyhow::Result<String> {
     if let Some(id) = read(&ours) {
         return Ok(id);
     }
-    let id = match read(&rbw::dirs::device_id_file()) {
+    let id = match read(&crate::legacy::device_id_file()) {
         Some(id) => id,
         None => {
             use rand::RngCore as _;
@@ -2525,14 +2392,6 @@ fn totp_seed(seed: &str) -> anyhow::Result<Vec<u8>> {
     Err(keyward_core::fault!("err.totpSeedTruncated", "total" => total))
 }
 
-/// The master password in rbw's protected memory: the page is locked and
-/// zeroed when reset, so the password leaks into neither swap nor dumps.
-fn locked_password(password: &str) -> rbw::locked::Password {
-    let mut vec = rbw::locked::Vec::new();
-    vec.extend(password.bytes());
-    rbw::locked::Password::new(vec)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2581,7 +2440,7 @@ mod tests {
     /// date.
     #[test]
     fn a_rotated_refresh_token_replaces_the_old_one() {
-        let mut db = rbw::db::Db::new();
+        let mut db = crate::session::Session::new();
         db.access_token = Some("a1".into());
         db.refresh_token = Some("r1".into());
         rotate(&mut db, tokens("a2", Some("r2")));

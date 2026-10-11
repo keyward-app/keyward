@@ -532,10 +532,10 @@ mod tests {
     fn a_snapshot_decrypts_with_real_keys() {
         // A real user key and real rbw ciphertexts: the whole path is under
         // test, not only assembling JSON out of ready-made strings.
-        let mut raw = rbw::locked::Vec::new();
-        raw.extend(std::iter::repeat_n(7u8, 64));
-        let user = rbw::locked::Keys::new(raw);
-        let enc = |s: &str| rbw::cipherstring::CipherString::encrypt_symmetric(&user, s.as_bytes()).unwrap().to_string();
+        let mut raw = crate::crypto::SecretBytes::new();
+        raw.extend(std::iter::repeat_n(7u8, 64)).unwrap();
+        let user = crate::crypto::Keys::new(raw);
+        let enc = |s: &str| crate::crypto::CipherString::encrypt_symmetric(&user, s.as_bytes()).unwrap().to_string();
         let snapshot: Sync = serde_json::from_value(serde_json::json!({
             "folders": [{"id": "f", "name": enc("Folder")}],
             "ciphers": [

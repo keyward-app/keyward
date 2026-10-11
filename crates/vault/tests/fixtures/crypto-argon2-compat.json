@@ -1,0 +1,19 @@
+{
+  "provenance": "Synthetic Node/OpenSSL PBKDF2-SHA256 or Argon2id, HKDF-expand, AES-CBC/PKCS7, HMAC-SHA256 and RSA-OAEP-SHA1; fixed IV only for test vectors.",
+  "email": "compat@example.test",
+  "password": "Synthetic passphrase ✓ 123!",
+  "iterations": 2,
+  "memoryMiB": 16,
+  "parallelism": 1,
+  "user": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+Pw==",
+  "org": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+fw==",
+  "item": "gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+vw==",
+  "plain": "S2V5d2FyZCBjb21wYXRpYmlsaXR5AAD/gA0K",
+  "protectedKey": "2.8PHy8/T19vf4+fr7/P3+/w==|qa9PzpkAwPFVr8/n2WplgGQib6hfstvmI9qdxpRIfVnfO52DWz0plP7s5Reh5+6mq2qBNo5zb80WWIcpN2b0xm0qFL2xvNMTTD6YVgmU9e8=|ZzksQ8nStXyRW/L/PAUI8Z/6LnohBLk5MLF/nNQO5r8=",
+  "protectedPrivateKey": "2.8PHy8/T19vf4+fr7/P3+/w==|urdImHJKI0BVhWgs5rq1NC8P2R3h2mvQDhoiveMeJPxncKsA8K5VI/yEJuE+o6El3IF4WpjrtJbmMFoCoSt+GjWjcVqPA2weJT2Q3x2xF/cZYYf+jXs7g62TOWhiw9Ekn4A0MQCGIv2inAeXslJRVA5WSD4uMXV8kpg85Oy9aoGePdZrlmXzdx4f0V4KaZgqRz2zdi8peA513l1Sny8OoLfTFuOTsLTcoPoVxIBTOqFWXKzysQvK7M/DwVqxgxxUGli+DPA81747L9zBqs7FLcHSbf9jSlAW5KHy61LjfDM3RxgMo2OMFI7FjkycRY7llxQJSatZfVy2FeUE9heEA40Psul5Je2ZVCX5fhc+oqyAWuVF11YL/BpLxtIdNvLmre03VLgxhMCiSevqATrlKv6gCgh+xNDGEaELh+EeDdeMJLxQr18UOOz58+0Jj4C9we1jrXHGDiaadNQLLr0t/bfUgzAOfcAGxmGTXIAHUQv7G5i6Xr63LdBgx534lOLLxvq/KOrLvHHgNEQqbTVFhJguMkavbDxK7ccsc6+bA9BgLXmlhpM/H/SoGLEWXQhqmEHPxKAA2BUuaYTzSpQRO6pc047xRKZWLqxZzVoJgHGlQhM/N299sRZ7KzuexRKYzrbh1w7aZlKtj4iylJnwvAmFHfv3CONyHE/OqKADT8EHsp7v8xFjIe2GsypehfRTajWXw+OvCCCCxSpQoGxXYYhlVqfEGFvWivym3XXbyoUs4zTrMxNeCOIcsaD97yjvgd6LRqv9LhpU7LU0U4CJCkcj1Aj/x/3qdyVeKRpzwwVxqQCCKpEDELd4Sd8qX9ZXbOvGIUbWyhf7Uf5d5QEMgj6Mns45bd1g+wostXr31J9xa4NC/1kMQerzzzcaGVkB7XhvsnIjF4RHuVWFrJBsZEarB70EzUroB8Qfh001QlhG01StsMBqkthRWtituXuuqt4pPxtmHyb08NbOPGfUvcU+H1nmha2n0dHPcnHU0sLasYXW+D+gSPNfH2Z1BUxMWtcuQdyp/UUVBvXKMFevtnI0EPTuH+eItUWUXkGCzfJH0tMhSp+F30dPhbJ2OsR5AJLCYcjA6s8SMB5LvQvGLsrUcwpYf2kARGzBtJeNQ3ljiB+UxNoRdOy3W+aN5hEbMBDrmfvlFAmlcUpunlXQEcdRmBy8wLQP9Db4BuhKWJZTxYMseI50JuYjPtc5bcttOXpgx5eY3Kt+hRBJR/rlSP9a/lGqcPUgsUvfb7LXS8zj3Xct7Xicdol8P6nsVnUw2+dmZzArpQl5zu0jBsINkLcXIpL2SI7ZF8vu7GJFhOV3xK3ANPx9oMVN0ojJTFUZ3bL33GUH7JQ55JgjXqgf8ZxmWPXXloQYEwny7M21N8Y7tOE25kjEAZPzAADHZHjXEtjA4kNbBw0sAMZwgf/kn381TazFs/KlcJJQMyL9XCVta4fLPyueHiaRNjCrDFPpvxuuIGquLv9kXVmMM9xNyNy8iuUb69YRGKB88MILzE066FmaoyxqGsgvngbSBFLHdA/EFdN0MCjf7LqJ3zCs0aEVAyiYZUqQ5KvlirU0g8IvwWOTldE3FWw/dPe9iGkMmt9txwEerXmrkVNayh8xpVm96o4OelhLVNBfx9HEZ74=|tKQGQlz0/8m/G2fa3QHjXFIRbK65/ZJiGk0dh4EztD8=",
+  "protectedOrgKey": "4.ak7Rcc16jxNt+tP9PzqImRYvXSmTv6a5l/HsEaODjwcG9XFKaz6QnfJvsKesbbqZfwjBwfNoskFsgVpciiG8gGNDoDXmMWXT/tUub63yxkIa8D9YNZ7OH/Nihh9hbTKN6+9sa5gy8foV1JIWEf5SKIjmhGa/nhMg1yPAHnU+OFJxCRbTYfdMOrN92nyL8EGJUXi5ETc5DpwewYwRVb1kd1w6Ml5yPEC/eoTAmfo5OTqI5EEyGzsf1QV9PP9E/CxqkwB7FAiZ31cA+kqOV2CCot9EQeXJeiNik8ME123vltKHKJ98F2sBvD/M4YpTJHUHHPa6E6I4L9fRMoYNhqS4Hw==",
+  "protectedItemKey": "2.8PHy8/T19vf4+fr7/P3+/w==|d53SYmOkpmmAsU2B4eZf3S0MWCmYDjzkjcUKLl2f977CLu5amDL9CA2ey2TxE/PzDUql/1+vR+l1O2+civn9sz80jmhx9OYOV8+yUbD4iDE=|EOY4jbcVfBFcfrG7Nvs31w//2G+z4ThnfB312CM05YY=",
+  "userCipher": "2.8PHy8/T19vf4+fr7/P3+/w==|AEpsc7C7nU5a2R1ts9e16yiLqfldNiOhxT7Rz7979YM=|CX3srZgy4HHtDjSaNz3Lg022WBIDjBFhy0rb/nDZS8M=",
+  "orgCipher": "2.8PHy8/T19vf4+fr7/P3+/w==|rmYkTtMRrbTC1TXNREzyQC0uhFy0pzkbw6+E/GyPCQs=|kKz1F0j/l2gfpb/hzSkmcoS6wA1/LN9F7wJfkQXzQ/U=",
+  "itemCipher": "2.8PHy8/T19vf4+fr7/P3+/w==|JUjwcYcZY/qvBF40QZtRV0wRiP6WHXPgJoYa6yaJhwg=|hh/KNj9Jlgkr94qzbqEvz4p0P8IH04iwAUT4DabMcxM="
+}

@@ -245,8 +245,21 @@ export class PathStore {
   /// its parts read the new state as they draw, and nobody is told to draw
   /// again in the middle of it.
   rebase(query: Query, notify = true) {
+    // Slugs are display names, not identity. Recompiling yesterday's text
+    // after a rename turns an open item into a text search. Resolve the old
+    // state by its stable node ids, then spell it with the new graph.
+    const rebaseState = (previous: PathState): PathState => {
+      const segs: Segment[] = [];
+      for (const s of previous.segs) {
+        if (!isFilter(s) && !query.dir.has(s.id)) break;
+        segs.push(s);
+      }
+      const map = previous.map && query.dir.has(previous.map.anchor) ? previous.map : null;
+      return query.compile(query.serialize({ ...previous, segs, map }));
+    };
+    this.history = this.history.map((line) => query.serialize(rebaseState(this.query.compile(line))));
+    const state = rebaseState(this.snap.state);
     this.query = query;
-    const state = query.compile(this.snap.line);
     this.history[this.at] = query.serialize(state);
     if (notify) this.set(state, this.snap.focus);
     else this.snap = { ...this.snap, state, line: this.query.serialize(state) };
