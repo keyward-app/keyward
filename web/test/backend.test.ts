@@ -613,10 +613,14 @@ describe("the clipboard's clear", () => {
       await write(s);
     };
     await t.timers.runAll();
+    // The digest uses WebCrypto's worker pool. A fixed number of event-loop
+    // turns does not mean that the refused attempt has finished on CI.
+    await expect.poll(() => t.backend.clipboardState()).toBe("stuck");
     expect(t.clip.text).toBe("own-secret");
     expect(t.backend.clipboardState()).toBe("stuck");
     refuse = false;
     await t.focus.regain();
+    await expect.poll(() => t.backend.clipboardState()).toBe("idle");
     expect(t.clip.text).toBe("");
     expect(t.backend.clipboardState()).toBe("idle");
   });
