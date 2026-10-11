@@ -52,7 +52,7 @@ any time.
 
 ## Contact
 
-Questions: open an issue at https://github.com/loperd/keyward/issues.
+Questions: open an issue at https://github.com/keyward-app/keyward/issues.
 
 ---
 
@@ -85,4 +85,4 @@ messaging браузера, зашифрованному от расширени
 keyward, в запросе названы сайт и аккаунт. Всегда можно выбрать «Другим
 способом» и отдать запрос браузеру, а расширение — удалить.
 
-Вопросы: https://github.com/loperd/keyward/issues.
+Вопросы: https://github.com/keyward-app/keyward/issues.

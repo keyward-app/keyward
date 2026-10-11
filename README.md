@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/loperd/keyward/actions/workflows/ci.yml"><img src="https://github.com/loperd/keyward/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/loperd/keyward/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-0b8f72.svg" alt="MIT license"></a>
+  <a href="https://github.com/keyward-app/keyward/actions/workflows/ci.yml"><img src="https://github.com/keyward-app/keyward/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/keyward-app/keyward/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-0b8f72.svg" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2014%2B-111827.svg" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/status-experimental-f59e0b.svg" alt="Experimental">
 </p>
@@ -90,7 +90,7 @@ For an SSH destination, Keyward selects one key and offers it through a dedicate
 The native app targets **macOS 14+ on Apple silicon**. To build from source, install Xcode Command Line Tools (`xcode-select --install`), stable Rust with Cargo, and Node.js 24.7+ with npm:
 
 ```sh
-git clone https://github.com/loperd/keyward.git
+git clone https://github.com/keyward-app/keyward.git
 cd keyward
 npm ci
 make install

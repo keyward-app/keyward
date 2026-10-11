@@ -37,7 +37,7 @@ no `eval`. The extension pages' CSP is `default-src 'none'; script-src 'self'`.
   purposes unrelated to the single purpose; not used or transferred to
   determine creditworthiness or for lending.
 - **Remote code:** no.
-- **Privacy policy URL:** https://github.com/loperd/keyward/blob/master/docs/extension-privacy.md
+- **Privacy policy URL:** https://github.com/keyward-app/keyward/blob/master/docs/extension-privacy.md
 
 ## Listing
 
@@ -101,7 +101,7 @@ submission; do not use account data or production screenshots.
 > its own: without the app, every passkey request goes to the browser's own
 > implementation, exactly as if the extension were not installed.
 >
-> To see it work: install keyward from https://github.com/loperd/keyward
+> To see it work: install keyward from https://github.com/keyward-app/keyward
 > (`make install` on macOS 14 or later; it installs the native messaging host
 > for Chrome), sign in to a Bitwarden or Vaultwarden account in the app, then
 > open https://webauthn.io, enter a user name and press Register. The keyward

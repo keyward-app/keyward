@@ -6,7 +6,7 @@ members = ["crates/core", "crates/bw", "crates/sshkey", "crates/vault", "crates/
 version = "0.2.3"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/loperd/keyward"
+repository = "https://github.com/keyward-app/keyward"
 
 [workspace.dependencies]
 keyward-core = { path = "crates/core" }

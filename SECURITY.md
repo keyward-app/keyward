@@ -6,7 +6,7 @@ reporting privately first.
 ## Reporting a vulnerability
 
 Please use GitHub's private vulnerability reporting: **Security → Report a
-vulnerability** on https://github.com/loperd/keyward. Do not open a public
+vulnerability** on https://github.com/keyward-app/keyward. Do not open a public
 issue for it.
 
 Include what you found, how to reproduce it, and what it lets an attacker do.
